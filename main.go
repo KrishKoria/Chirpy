@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"sync/atomic"
+	"encoding/json"
+	"strings"
 )
 
 
@@ -11,6 +13,32 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 }
 
+func respondWithError(w http.ResponseWriter, code int, msg string) {
+    respondWithJSON(w, code, map[string]string{"error": msg})
+}
+
+func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+    w.Header().Set("Content-Type", "application/json; charset=utf-8")
+    w.WriteHeader(code)
+    resp, _ := json.Marshal(payload)
+    w.Write(resp)
+}
+
+func cleanProfanity(content string) string {
+    profaneWords := []string{"kerfuffle", "sharbert", "fornax"}
+    words := strings.Fields(content) 
+    
+    for i, word := range words {
+        for _, profane := range profaneWords {
+            if strings.ToLower(word) == profane {
+                words[i] = "****"
+                break
+            }
+        }
+    }
+    
+    return strings.Join(words, " ")
+}
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +72,28 @@ func (cfg *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
     w.Write([]byte("Hits reset to 0"))
 }
 
+func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
+	type chirpRequest struct {
+		Body string `json:"body"`
+	}
+	
+	type chirpResponse struct {
+		Cleaned_Body string `json:"cleaned_body"`
+	}
+	var req chirpRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Something went wrong")
+        return
+    }
+
+    if len(req.Body) > 140 {
+		respondWithError(w, http.StatusBadRequest, "Chirp is too long")
+        return
+    }
+
+    cleaned := cleanProfanity(req.Body)
+	respondWithJSON(w, http.StatusOK, chirpResponse{Cleaned_Body: cleaned})
+}
 func main()  {
 	mux := http.NewServeMux();
 	cfg := &apiConfig{}
@@ -51,6 +101,7 @@ func main()  {
 	mux.HandleFunc("GET /api/healthz", readinessHandler);
 	mux.HandleFunc("GET /admin/metrics", cfg.metricsHandler);
 	mux.HandleFunc("POST /admin/reset", cfg.resetHandler);
+	mux.HandleFunc("POST /api/validate_chirp", validateChirpHandler);
 	server:= &http.Server{
 		Addr: ":8080",
 		Handler: mux,	
