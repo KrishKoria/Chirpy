@@ -6,11 +6,16 @@ import (
 	"sync/atomic"
 	"encoding/json"
 	"strings"
+    _ "github.com/lib/pq"
+    "os"
+    "database/sql"
+    "github.com/KrishKoria/Chirpy/internal/database"
 )
 
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
+    db *database.Queries
 }
 
 func respondWithError(w http.ResponseWriter, code int, msg string) {
@@ -95,8 +100,22 @@ func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, chirpResponse{Cleaned_Body: cleaned})
 }
 func main()  {
-	mux := http.NewServeMux();
-	cfg := &apiConfig{}
+    
+    dbURL := os.Getenv("DB_URL")
+    if dbURL == "" {
+        panic("DB_URL environment variable is not set")
+    }
+    db, err := sql.Open("postgres", dbURL)
+    if err != nil {
+        panic(err)
+    }
+    defer db.Close()
+    dbQueries := database.New(db)
+    cfg := &apiConfig{
+        db: dbQueries,
+    }
+    
+    mux := http.NewServeMux();
 	mux.Handle("/app/", http.StripPrefix("/app", cfg.middlewareMetricsInc(http.FileServer(http.Dir("./app")))));
 	mux.HandleFunc("GET /api/healthz", readinessHandler);
 	mux.HandleFunc("GET /admin/metrics", cfg.metricsHandler);
