@@ -1,19 +1,19 @@
 package main
 
 import (
-    "database/sql"
-    "encoding/json"
-    "fmt"
-    "net/http"
-    "os"
-    "strings"
-    "sync/atomic"
-    "time"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"strings"
+	"sync/atomic"
+	"time"
 
-    "github.com/google/uuid"
-    "github.com/lib/pq"
-    "github.com/joho/godotenv"
-    "github.com/KrishKoria/Chirpy/internal/database"
+	"github.com/KrishKoria/Chirpy/internal/database"
+	"github.com/google/uuid"
+	"github.com/joho/godotenv"
+	"github.com/lib/pq"
 )
 
 type apiConfig struct {
@@ -101,17 +101,23 @@ func (cfg *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
     w.Write([]byte("All users deleted and hits reset to 0"))
 }
 
-func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) chirpsHandler(w http.ResponseWriter, r *http.Request) {
     type chirpRequest struct {
-        Body string `json:"body"`
+        Body   string `json:"body"`
+        UserID string `json:"user_id"`
     }
 
     type chirpResponse struct {
-        Cleaned_Body string `json:"cleaned_body"`
+        ID        uuid.UUID `json:"id"`
+        CreatedAt time.Time `json:"created_at"`
+        UpdatedAt time.Time `json:"updated_at"`
+        Body      string    `json:"body"`
+        UserID    uuid.UUID `json:"user_id"`
     }
+
     var req chirpRequest
     if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        respondWithError(w, http.StatusBadRequest, "Something went wrong")
+        respondWithError(w, http.StatusBadRequest, "Invalid request payload")
         return
     }
 
@@ -121,7 +127,31 @@ func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
     }
 
     cleaned := cleanProfanity(req.Body)
-    respondWithJSON(w, http.StatusOK, chirpResponse{Cleaned_Body: cleaned})
+    chirpID := uuid.New()
+    createdAt := time.Now()
+    updatedAt := createdAt
+
+    params := database.CreateChirpParams{
+        ID:        chirpID,
+        CreatedAt: createdAt,
+        UpdatedAt: updatedAt,
+        Body:      cleaned,
+        UserID:    uuid.MustParse(req.UserID),
+    }
+
+    chirp, err := cfg.db.CreateChirp(r.Context(), params)
+    if err != nil {
+        respondWithError(w, http.StatusInternalServerError, "Failed to create chirp")
+        return
+    }
+
+    respondWithJSON(w, http.StatusCreated, chirpResponse{
+        ID:        chirp.ID,
+        CreatedAt: chirp.CreatedAt,
+        UpdatedAt: chirp.UpdatedAt,
+        Body:      chirp.Body,
+        UserID:    chirp.UserID,
+    })
 }
 
 func (cfg *apiConfig) usersHandler(w http.ResponseWriter, r *http.Request) {
@@ -151,7 +181,6 @@ func (cfg *apiConfig) usersHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Map database.User to main.User
     mappedUser := User{
         ID:        user.ID,
         CreatedAt: user.CreatedAt,
@@ -186,11 +215,11 @@ func main() {
 
     mux := http.NewServeMux()
     mux.Handle("/app/", http.StripPrefix("/app", cfg.middlewareMetricsInc(http.FileServer(http.Dir("./app")))))
-    mux.HandleFunc("/api/healthz", readinessHandler)
-    mux.HandleFunc("/admin/metrics", cfg.metricsHandler)
-    mux.HandleFunc("/admin/reset", cfg.resetHandler)
-    mux.HandleFunc("/api/validate_chirp", validateChirpHandler)
-    mux.HandleFunc("/api/users", cfg.usersHandler)
+    mux.HandleFunc("GET /api/healthz", readinessHandler)
+    mux.HandleFunc("GET /admin/metrics", cfg.metricsHandler)
+    mux.HandleFunc("POST /admin/reset", cfg.resetHandler)
+    mux.HandleFunc("POST /api/users", cfg.usersHandler)
+    mux.HandleFunc("POST /api/chirps", cfg.chirpsHandler)
 
     server := &http.Server{
         Addr:    ":8080",
