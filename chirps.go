@@ -7,13 +7,25 @@ import (
     "database/sql"
 	"github.com/KrishKoria/Chirpy/internal/database"
 	"github.com/google/uuid"
+    "github.com/KrishKoria/Chirpy/internal/auth"
+
 )
 
 
 func (cfg *APIConfig) chirpsHandler(w http.ResponseWriter, r *http.Request) {
     type chirpRequest struct {
         Body   string `json:"body"`
-        UserID string `json:"user_id"`
+    }
+
+    tokenString, err := auth.GetBearerToken(r.Header)
+    if err != nil {
+        respondWithError(w, http.StatusUnauthorized, "Authentication required")
+        return
+    }
+    userID, err := auth.ValidateJWT(tokenString, cfg.JWTSecret)
+    if err != nil {
+        respondWithError(w, http.StatusUnauthorized, "Invalid or expired token")
+        return
     }
 
     var req chirpRequest
@@ -37,7 +49,7 @@ func (cfg *APIConfig) chirpsHandler(w http.ResponseWriter, r *http.Request) {
         CreatedAt: createdAt,
         UpdatedAt: updatedAt,
         Body:      cleaned,
-        UserID:    uuid.MustParse(req.UserID),
+        UserID:    userID,
     }
 
     chirp, err := cfg.DB.CreateChirp(r.Context(), params)

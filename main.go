@@ -30,6 +30,7 @@ func main() {
     cfg := &APIConfig{
         DB:       dbQueries,
         Platform: os.Getenv("PLATFORM"),
+        JWTSecret: os.Getenv("JWT_SECRET"),
     }
 
     mux := http.NewServeMux()

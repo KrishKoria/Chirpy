@@ -6,6 +6,8 @@ import (
     "github.com/KrishKoria/Chirpy/internal/auth"
     "github.com/KrishKoria/Chirpy/internal/database"
 	"github.com/lib/pq"
+    "time"
+    "github.com/google/uuid"
 )
 
 
@@ -68,6 +70,15 @@ func (cfg *APIConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
     type loginRequest struct {
         Email    string `json:"email"`
         Password string `json:"password"`
+        ExpiresInSeconds *int `json:"expires_in_seconds,omitempty"`
+    }
+
+    type loginResponse struct {
+        ID        uuid.UUID `json:"id"`
+        CreatedAt time.Time `json:"created_at"`
+        UpdatedAt time.Time `json:"updated_at"`
+        Email     string    `json:"email"`
+        Token     string    `json:"token"`
     }
 
     var req loginRequest
@@ -93,11 +104,27 @@ func (cfg *APIConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    response := User{
+    const defaultExpirationSeconds = 3600 
+    expiresIn := defaultExpirationSeconds
+    
+    if req.ExpiresInSeconds != nil && *req.ExpiresInSeconds > 0 {
+        if *req.ExpiresInSeconds < defaultExpirationSeconds {
+            expiresIn = *req.ExpiresInSeconds
+        }
+    }
+
+    token, err := auth.MakeJWT(user.ID, cfg.JWTSecret, time.Duration(expiresIn)*time.Second)
+    if err != nil {
+        respondWithError(w, http.StatusInternalServerError, "Failed to generate authentication token")
+        return
+    }
+
+    response := loginResponse{
         ID:        user.ID,
         CreatedAt: user.CreatedAt,
         UpdatedAt: user.UpdatedAt,
         Email:     user.Email,
+        Token:     token,
     }
 
     respondWithJSON(w, http.StatusOK, response)

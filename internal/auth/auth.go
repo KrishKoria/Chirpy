@@ -7,7 +7,8 @@ import (
     "errors"
     "fmt"
     "time"
-    
+    "net/http"
+    "strings"
 )
 
 func HashPassword(password string) (string, error) {
@@ -66,4 +67,26 @@ func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
     }
     
     return userID, nil
+}
+
+
+func GetBearerToken(headers http.Header) (string, error) {
+    authHeader := headers.Get("Authorization")
+    if authHeader == "" {
+        return "", errors.New("authorization header is missing")
+    }
+
+    const prefix = "Bearer "
+    if !strings.HasPrefix(authHeader, prefix) {
+        return "", errors.New("authorization header must start with 'Bearer '")
+    }
+
+    token := strings.TrimPrefix(authHeader, prefix)
+    token = strings.TrimSpace(token)
+    
+    if token == "" {
+        return "", errors.New("token is empty")
+    }
+
+    return token, nil
 }
