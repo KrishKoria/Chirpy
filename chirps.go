@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
-
+    "database/sql"
 	"github.com/KrishKoria/Chirpy/internal/database"
 	"github.com/google/uuid"
 )
@@ -14,14 +14,6 @@ func (cfg *APIConfig) chirpsHandler(w http.ResponseWriter, r *http.Request) {
     type chirpRequest struct {
         Body   string `json:"body"`
         UserID string `json:"user_id"`
-    }
-
-    type chirpResponse struct {
-        ID        uuid.UUID `json:"id"`
-        CreatedAt time.Time `json:"created_at"`
-        UpdatedAt time.Time `json:"updated_at"`
-        Body      string    `json:"body"`
-        UserID    uuid.UUID `json:"user_id"`
     }
 
     var req chirpRequest
@@ -54,7 +46,7 @@ func (cfg *APIConfig) chirpsHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    respondWithJSON(w, http.StatusCreated, chirpResponse{
+    respondWithJSON(w, http.StatusCreated, ChirpResponse{
         ID:        chirp.ID,
         CreatedAt: chirp.CreatedAt,
         UpdatedAt: chirp.UpdatedAt,
@@ -64,13 +56,6 @@ func (cfg *APIConfig) chirpsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *APIConfig) getAllChirpsHandler(w http.ResponseWriter, r *http.Request) {
-    type chirpResponse struct {
-        ID        uuid.UUID `json:"id"`
-        CreatedAt time.Time `json:"created_at"`
-        UpdatedAt time.Time `json:"updated_at"`
-        Body      string    `json:"body"`
-        UserID    uuid.UUID `json:"user_id"`
-    }
 
     chirps, err := cfg.DB.GetAllChirps(r.Context())
     if err != nil {
@@ -78,9 +63,9 @@ func (cfg *APIConfig) getAllChirpsHandler(w http.ResponseWriter, r *http.Request
         return
     }
 
-    var response []chirpResponse
+    var response []ChirpResponse
     for _, chirp := range chirps {
-        response = append(response, chirpResponse{
+        response = append(response, ChirpResponse{
             ID:        chirp.ID,
             CreatedAt: chirp.CreatedAt,
             UpdatedAt: chirp.UpdatedAt,
@@ -89,5 +74,32 @@ func (cfg *APIConfig) getAllChirpsHandler(w http.ResponseWriter, r *http.Request
         })
     }
 
+    respondWithJSON(w, http.StatusOK, response)
+}
+
+func (cfg *APIConfig) getChirpHandler(w http.ResponseWriter, r *http.Request) { 
+    id := r.PathValue("chirpID")
+    chirpID, err := uuid.Parse(id)
+    if err != nil {
+        respondWithError(w, http.StatusBadRequest, "Invalid chirp ID")
+        return
+    }
+
+    chirp, err := cfg.DB.GetChirpByID(r.Context(), chirpID)
+    if err != nil {
+        if err == sql.ErrNoRows {
+            respondWithError(w, http.StatusNotFound, "Chirp not found")
+            return
+        }
+        respondWithError(w, http.StatusInternalServerError, "Failed to retrieve chirp")
+        return
+    }
+    response := ChirpResponse{
+        ID:        chirp.ID,
+        CreatedAt: chirp.CreatedAt,
+        UpdatedAt: chirp.UpdatedAt,
+        Body:      chirp.Body,
+        UserID:    chirp.UserID,
+    }
     respondWithJSON(w, http.StatusOK, response)
 }
