@@ -3,6 +3,11 @@ package auth
 import (
     "golang.org/x/crypto/bcrypt"
     "github.com/golang-jwt/jwt/v5"
+    "github.com/google/uuid"
+    "errors"
+    "fmt"
+    "time"
+    
 )
 
 func HashPassword(password string) (string, error) {
