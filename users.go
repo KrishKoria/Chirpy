@@ -79,6 +79,7 @@ func (cfg *APIConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
         UpdatedAt time.Time `json:"updated_at"`
         Email     string    `json:"email"`
         Token     string    `json:"token"`
+        RefreshToken string `json:"refresh_token"`
     }
 
     var req loginRequest
@@ -104,27 +105,40 @@ func (cfg *APIConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    const defaultExpirationSeconds = 3600 
-    expiresIn := defaultExpirationSeconds
-    
-    if req.ExpiresInSeconds != nil && *req.ExpiresInSeconds > 0 {
-        if *req.ExpiresInSeconds < defaultExpirationSeconds {
-            expiresIn = *req.ExpiresInSeconds
-        }
-    }
-
-    token, err := auth.MakeJWT(user.ID, cfg.JWTSecret, time.Duration(expiresIn)*time.Second)
+    token, err := auth.MakeJWT(user.ID, cfg.JWTSecret, time.Hour)
     if err != nil {
         respondWithError(w, http.StatusInternalServerError, "Failed to generate authentication token")
         return
     }
 
+    refreshToken, err := auth.MakeRefreshToken()
+    if err != nil {
+        respondWithError(w, http.StatusInternalServerError, "Failed to generate refresh token")
+        return
+    }
+
+    now := time.Now().UTC()
+    expiresAt := now.AddDate(0, 0, 60)
+    
+    err = cfg.DB.CreateRefreshToken(r.Context(), database.CreateRefreshTokenParams{
+        Token:      refreshToken,
+        UserID:     user.ID,
+        CreatedAt:  now,
+        UpdatedAt:  now,
+        ExpiresAt:  expiresAt,
+    })
+
+    if err != nil {
+        respondWithError(w, http.StatusInternalServerError, "Failed to store refresh token")
+        return
+    }
     response := loginResponse{
         ID:        user.ID,
         CreatedAt: user.CreatedAt,
         UpdatedAt: user.UpdatedAt,
         Email:     user.Email,
         Token:     token,
+        RefreshToken: refreshToken,
     }
 
     respondWithJSON(w, http.StatusOK, response)

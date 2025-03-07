@@ -9,6 +9,8 @@ import (
     "time"
     "net/http"
     "strings"
+    "crypto/rand"
+    "encoding/hex"
 )
 
 func HashPassword(password string) (string, error) {
@@ -89,4 +91,15 @@ func GetBearerToken(headers http.Header) (string, error) {
     }
 
     return token, nil
+}
+
+
+func MakeRefreshToken() (string, error) {
+    tokenBytes := make([]byte, 32)
+    _, err := rand.Read(tokenBytes)
+    if err != nil {
+        return "", err
+    }
+    
+    return hex.EncodeToString(tokenBytes), nil
 }
