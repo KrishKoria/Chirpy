@@ -5,9 +5,21 @@ import (
     "net/http"
 
     "github.com/google/uuid"
+    "github.com/KrishKoria/Chirpy/internal/auth"
 )
 
 func (cfg *APIConfig) polkaWebhookHandler(w http.ResponseWriter, r *http.Request) {
+    apiKey, err := auth.GetAPIKey(r.Header)
+    if err != nil {
+        respondWithError(w, http.StatusUnauthorized, "API key required")
+        return
+    }
+
+    if apiKey != cfg.PolkaKey {
+        respondWithError(w, http.StatusUnauthorized, "Invalid API key")
+        return
+    }
+
     type webhookData struct {
         UserID string `json:"user_id"`
     }
