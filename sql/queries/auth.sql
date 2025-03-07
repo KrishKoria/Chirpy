@@ -15,17 +15,10 @@ INSERT INTO refresh_tokens (
     $6  -- revoked_at (can be NULL)
 );
 
--- -- name: GetRefreshToken :one
--- SELECT * FROM refresh_tokens WHERE token = $1 LIMIT 1;
+-- name: GetRefreshToken :one
+SELECT * FROM refresh_tokens WHERE token = $1 LIMIT 1;
 
--- -- name: RevokeRefreshToken :exec
--- UPDATE refresh_tokens
--- SET revoked_at = $2, updated_at = $3
--- WHERE token = $1;
-
--- -- name: DeleteRefreshToken :exec
--- DELETE FROM refresh_tokens WHERE token = $1;
-
--- -- name: CleanExpiredRefreshTokens :exec
--- DELETE FROM refresh_tokens 
--- WHERE expires_at < NOW() OR revoked_at IS NOT NULL;
+-- name: RevokeRefreshToken :exec
+UPDATE refresh_tokens
+SET revoked_at = $2, updated_at = $3
+WHERE token = $1;

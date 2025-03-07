@@ -37,13 +37,14 @@ func main() {
     mux.Handle("/app/", http.StripPrefix("/app", cfg.middlewareMetricsInc(http.FileServer(http.Dir("./app")))))
     mux.HandleFunc("GET /api/healthz", ReadinessHandler)
     mux.HandleFunc("GET /admin/metrics", cfg.MetricsHandler)
+    mux.HandleFunc("GET /api/chirps", cfg.getAllChirpsHandler)
+    mux.HandleFunc("GET /api/chirps/{chirpID}", cfg.getChirpHandler)
     mux.HandleFunc("POST /admin/reset", cfg.ResetHandler)
     mux.HandleFunc("POST /api/users", cfg.UsersHandler)
     mux.HandleFunc("POST /api/chirps", cfg.chirpsHandler)
-    mux.HandleFunc("GET /api/chirps", cfg.getAllChirpsHandler)
-    mux.HandleFunc("GET /api/chirps/{chirpID}", cfg.getChirpHandler)
     mux.HandleFunc("POST /api/login", cfg.loginHandler)
-    
+    mux.HandleFunc("POST /api/refresh", cfg.refreshHandler)
+    mux.HandleFunc("POST /api/revoke", cfg.revokeHandler)
     server := &http.Server{
         Addr:    ":8080",
         Handler: mux,
