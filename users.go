@@ -165,3 +165,76 @@ func (cfg *APIConfig) ResetHandler(w http.ResponseWriter, r *http.Request) {
     w.WriteHeader(http.StatusOK)
     w.Write([]byte("All users deleted and hits reset to 0"))
 }
+
+func (cfg *APIConfig) updateUserHandler(w http.ResponseWriter, r *http.Request) {
+    tokenString, err := auth.GetBearerToken(r.Header)
+    if err != nil {
+        respondWithError(w, http.StatusUnauthorized, "Authentication required")
+        return
+    }
+    
+    userID, err := auth.ValidateJWT(tokenString, cfg.JWTSecret)
+    if err != nil {
+        respondWithError(w, http.StatusUnauthorized, "Invalid or expired token")
+        return
+    }
+    
+    type updateUserRequest struct {
+        Email    string `json:"email"`
+        Password string `json:"password"`
+    }
+    
+    var req updateUserRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        respondWithError(w, http.StatusBadRequest, "Invalid request payload")
+        return
+    }
+    
+    if req.Email == "" {
+        respondWithError(w, http.StatusBadRequest, "Email is required")
+        return
+    }
+    
+    if req.Password == "" {
+        respondWithError(w, http.StatusBadRequest, "Password is required")
+        return
+    }
+    
+    hashedPassword, err := auth.HashPassword(req.Password)
+    if err != nil {
+        respondWithError(w, http.StatusInternalServerError, "Failed to process password")
+        return
+    }
+    
+    updatedUser, err := cfg.DB.UpdateUser(r.Context(), database.UpdateUserParams{
+        ID:             userID,
+        Email:          req.Email,
+        HashedPassword: hashedPassword,
+        UpdatedAt:      time.Now().UTC(),
+    })
+    
+    if err != nil {
+        if pqErr, ok := err.(*pq.Error); ok && pqErr.Code.Name() == "unique_violation" {
+            respondWithError(w, http.StatusConflict, "Email already exists")
+            return
+        }
+        respondWithError(w, http.StatusInternalServerError, "Failed to update user")
+        return
+    }
+    
+    type User struct {
+        ID        uuid.UUID `json:"id"`
+        CreatedAt time.Time `json:"created_at"`
+        UpdatedAt time.Time `json:"updated_at"`
+        Email     string    `json:"email"`
+    }
+    
+    response := User{
+        ID:        updatedUser.ID,
+        CreatedAt: updatedUser.CreatedAt,
+        UpdatedAt: updatedUser.UpdatedAt,
+        Email:     updatedUser.Email,
+    }
+    
+    respondWithJSON(w, http.StatusOK, response)
+}
