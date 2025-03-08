@@ -8,7 +8,7 @@ import (
 	"github.com/KrishKoria/Chirpy/internal/database"
 	"github.com/google/uuid"
     "github.com/KrishKoria/Chirpy/internal/auth"
-
+    "sort"
 )
 
 
@@ -69,11 +69,42 @@ func (cfg *APIConfig) chirpsHandler(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *APIConfig) getAllChirpsHandler(w http.ResponseWriter, r *http.Request) {
 
-    chirps, err := cfg.DB.GetAllChirps(r.Context())
-    if err != nil {
-        respondWithError(w, http.StatusInternalServerError, "Failed to retrieve chirps")
-        return
+    var chirps []database.Chirp
+    var err error
+    
+    authorIDStr := r.URL.Query().Get("author_id")
+
+    sortOrder := r.URL.Query().Get("sort")
+    if sortOrder == "" || (sortOrder != "asc" && sortOrder != "desc") {
+        sortOrder = "asc" 
     }
+
+    if authorIDStr != "" {
+        authorID, err := uuid.Parse(authorIDStr)
+        if err != nil {
+            respondWithError(w, http.StatusBadRequest, "Invalid author ID format")
+            return
+        }
+        
+        chirps, err = cfg.DB.GetChirpsByAuthor(r.Context(), authorID)
+        if err != nil {
+            respondWithError(w, http.StatusInternalServerError, "Failed to retrieve chirps")
+            return
+        }
+    } else {
+        chirps, err = cfg.DB.GetAllChirps(r.Context())
+        if err != nil {
+            respondWithError(w, http.StatusInternalServerError, "Failed to retrieve chirps")
+            return
+        }
+    }
+
+    sort.Slice(chirps, func(i, j int) bool {
+        if sortOrder == "asc" {
+            return chirps[i].CreatedAt.Before(chirps[j].CreatedAt)
+        }
+        return chirps[i].CreatedAt.After(chirps[j].CreatedAt)
+    })
 
     var response []ChirpResponse
     for _, chirp := range chirps {
